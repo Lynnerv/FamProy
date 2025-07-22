@@ -1,59 +1,110 @@
-# Importamos los módulos principales de Flask
-from flask import Flask, render_template, request, redirect, url_for, session
-
-# Importamos SQLAlchemy para gestionar la base de datos
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+import uuid  # Para generar token familiar único
 
-# Importamos os para verificar si la base de datos existe
-import os
-
-# Creamos la app Flask
 app = Flask(__name__)
+app.secret_key = "tu_clave_secreta_aqui"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///familias_cumpleaños.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Establecemos una clave secreta para manejar sesiones (login, etc.)
-app.secret_key = "supersecreto"  # Puedes cambiar esto por algo más seguro
-
-# Configuramos la URI de la base de datos, en este caso un archivo SQLite local
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-
-# Creamos una instancia de SQLAlchemy conectada a nuestra app Flask
 db = SQLAlchemy(app)
 
-# Importamos los modelos definidos en otro archivo (por ejemplo: models.py)
-from models import *
+# ✅ Modelo actualizado
+class Usuario(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    apellido_paterno = db.Column(db.String(100), nullable=False)
+    apellido_materno = db.Column(db.String(100), nullable=False)
+    celular = db.Column(db.String(20), nullable=False)
+    correo = db.Column(db.String(120), unique=True, nullable=False)
+    contraseña = db.Column(db.String(200), nullable=False)
+    token_familiar = db.Column(db.String(20), unique=True, nullable=False)
 
-# ---------------------------------------------------
-# RUTAS DE LA APLICACIÓN
-# ---------------------------------------------------
-
-# Ruta principal: redirecciona al login
-@app.route('/')
+# Ruta principal
+@app.route("/")
 def index():
-    return redirect(url_for('login'))
+    return redirect(url_for("login"))
 
-# Ruta para iniciar sesión (login)
-@app.route('/login', methods=['GET', 'POST'])
+# ✅ Ruta de registro actualizada
+@app.route("/registro", methods=["GET", "POST"])
+def registro():
+    if request.method == "POST":
+        nombre = request.form["nombre"]
+        apellido_paterno = request.form["apellido_paterno"]
+        apellido_materno = request.form["apellido_materno"]
+        celular = request.form["celular"]
+        correo = request.form["correo"]
+        contraseña = request.form["contraseña"]
+
+        # Verificar si correo ya existe
+        existente = Usuario.query.filter_by(correo=correo).first()
+        if existente:
+            flash("Este correo ya está registrado.", "error")
+            return redirect(url_for("registro"))
+
+        # Generar token familiar
+        token = str(uuid.uuid4())[:8]
+
+        nuevo_usuario = Usuario(
+            nombre=nombre,
+            apellido_paterno=apellido_paterno,
+            apellido_materno=apellido_materno,
+            celular=celular,
+            correo=correo,
+            contraseña=generate_password_hash(contraseña),
+            token_familiar=token
+        )
+
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+
+        flash(f"Registro exitoso. Tu token familiar es: {token}", "success")
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
+
+# Login (sin cambios)
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        # Aquí luego validaremos los datos del formulario de login (correo + contraseña)
-        pass
-    return render_template('login.html')  # Muestra el formulario de login
+    if request.method == "POST":
+        correo = request.form["correo"]
+        contraseña = request.form["contraseña"]
 
-# Ruta para registrar a la "cabeza de familia" (admin)
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        # Aquí luego crearemos un nuevo usuario administrador
-        pass
-    return render_template('register.html')  # Muestra el formulario de registro
+        usuario = Usuario.query.filter_by(correo=correo).first()
 
-# ---------------------------------------------------
-# PUNTO DE ENTRADA PRINCIPAL
-# ---------------------------------------------------
+        if usuario and check_password_hash(usuario.contraseña, contraseña):
+            session['user_id'] = usuario.id
+            session['user_nombre'] = usuario.nombre
+            session['user_token'] = usuario.token_familiar
+            flash(f"Bienvenido {usuario.nombre}!", "success")
+            return redirect(url_for("dashboard"))
 
+        flash("Correo o contraseña incorrectos.", "error")
+        return redirect(url_for("login"))
+
+    return render_template("login.html")
+
+# Dashboard
+@app.route("/dashboard")
+def dashboard():
+    if 'user_id' not in session:
+        flash("Por favor, inicia sesión primero.", "error")
+        return redirect(url_for("login"))
+
+    nombre = session.get('user_nombre')
+    token = session.get('user_token')
+    return f"Hola {nombre}, tu token familiar es: {token} <br><a href='/logout'>Cerrar sesión</a>"
+
+# Logout
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("Has cerrado sesión.", "success")
+    return redirect(url_for("login"))
+
+# Crear base de datos
 if __name__ == '__main__':
-    # Si el archivo database.db no existe, lo crea con las tablas definidas en models.py
-    if not os.path.exists("database.db"):
-        db.create_all()  # Crea todas las tablas
-    # Inicia la app en modo debug (útil para desarrollo)
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)

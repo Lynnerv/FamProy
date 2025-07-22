@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Login - Familia</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #1f1f1f; color: #f5f5f5; }
+        form { background: #2c2c2c; padding: 20px; max-width: 350px; margin: 50px auto; border-radius: 8px; }
+        input[type="email"], input[type="password"] {
+            width: 100%; padding: 8px; margin-bottom: 12px; border: none; border-radius: 4px;
+            background: #444; color: #f5f5f5;
+        }
+        input[type="submit"] {
+            background: #d4af37; color: black; border: none; padding: 10px; width: 100%; cursor: pointer;
+            font-weight: bold; border-radius: 4px;
+        }
+        input[type="submit"]:hover { background: #f0c846; }
+        .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; }
+        .success { background: #2e7d32; }
+        .error { background: #c62828; }
+        a { color: #d4af37; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <form method="POST" action="{{ url_for('login') }}">
+        <h2>Iniciar Sesión</h2>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <input type="email" name="correo" placeholder="Correo electrónico" required />
+        <input type="password" name="contraseña" placeholder="Contraseña" required />
+
+        <input type="submit" value="Entrar" />
+        <p>¿No tienes cuenta? <a href="{{ url_for('registro') }}">Regístrate aquí</a></p>
+    </form>
+</body>
+</html>
